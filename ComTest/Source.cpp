@@ -1,8 +1,5 @@
 #include <cstdio>
-#include <algorithm>
-#include <queue>
 #include <string>
-#include <iostream>
 #include <Windows.h>
 
 #define DEVICES_BUF_SIZE 65535
@@ -31,10 +28,9 @@ namespace SerialCom
 		int sendComData(char *transString);
 		int readComData(char *readBuf);
 		static DWORD WINAPI threadFunc(LPVOID pthis);
-		int threadRoutin();
-		//bool setPortName(string _portName);
-		//bool setBoundRate(int _boundRate);
-		//bool setBufSize(int _bufSize);
+		int threadMain();
+		int getReadData(char *buf, int bufSize);
+		void testCom();
 	};
 
 	bool SerialCom::initComPort(char *_portName, int _boundRate, int _writeBufSize)
@@ -69,13 +65,13 @@ namespace SerialCom
 		SetCommTimeouts(portHandle, &cto);
 
 		threadHandle = CreateThread(NULL, 0, SerialCom::threadFunc, (LPVOID)this, CREATE_SUSPENDED, (LPDWORD)&threadId);
-		//mutexHandle = CreateMutex(NULL, TRUE, NULL);
-		//threadExitFlag = false;
+		threadExitFlag = false;
+		mutexHandle = CreateMutex(NULL, TRUE, NULL);
 
 		return true;
 	}
 
-	int SerialCom::threadRoutin()
+	int SerialCom::threadMain()
 	{
 		bool exitFlag;
 		const DWORD bufLength = 1024;
@@ -85,10 +81,13 @@ namespace SerialCom
 		while (ReadFile(portHandle, buffer, bufLength, &readBytes, NULL))
 		{
 			if (readBytes > 0){
+				if (readBuffer != NULL)
+					delete [] readBuffer;
 				readBuffer = new BYTE[readBytes];
 				readBufSize = readBytes;
+				//printf("%d\n", readBufSize);
 				WaitForSingleObject(mutexHandle, 0);
-				memcpy_s(readBuffer, readBytes, buffer, bufLength);
+				memcpy_s(readBuffer, readBytes, buffer, readBytes);
 				exitFlag = threadExitFlag;
 				ReleaseMutex(mutexHandle);
 				if (exitFlag)
@@ -101,9 +100,15 @@ namespace SerialCom
 	DWORD WINAPI SerialCom::threadFunc(LPVOID pthis)
 	{
 		printf("ok!\n");
+		((SerialCom*)pthis)->threadMain();
 		ExitThread(0);
-		//((SerialCom*)pthis)->threadRoutin();
-		ExitThread(0);
+	}
+
+	int SerialCom::getReadData(char *buf, int bufSize)
+	{
+		//memcpy_s(buf, bufSize, readBuffer, readBufSize);
+		strncpy_s(buf, bufSize, (char*)readBuffer, readBufSize);
+		return readBufSize;
 	}
 
 	bool SerialCom::exitComPort()
@@ -130,6 +135,15 @@ namespace SerialCom
 		WaitForSingleObject(mutexHandle, 0);
 		threadExitFlag = true;
 		ReleaseMutex(mutexHandle);
+	}
+
+	void SerialCom::testCom()
+	{
+		char buffer[1024];
+		DWORD toReadBytes = 1024;
+		DWORD readBytes;
+		ReadFile(portHandle, buffer, toReadBytes, &readBytes, NULL);
+		printf("%s\n", buffer);
 	}
 
 	int getSerialPortNumbers(int *comPortTable, int num_max)
@@ -167,10 +181,20 @@ int main()
 	int comPortTable[255];
 	int numOfComPorts = SerialCom::getSerialPortNumbers(comPortTable, 255);
 	SerialCom::SerialCom com;
+	char c;
+	char buf[1024];
 	printf("program running\n");
-	if (com.initComPort("COM4", 9600, 255))
+	if (com.initComPort("COM3", 9600, 255))
 	{
 		printf("init true\n");
+	}
+	
+	while ((c = getchar()) != 'q')
+	{
+		//Sleep(100);
+		//com.getReadData(buf, 1024);
+		com.testCom();
+		//printf("%s", buf);
 	}
 
 	if (com.exitComPort())
@@ -183,6 +207,5 @@ int main()
 		printf("%d\n", comPortTable[i]);
 	}
 
-	while (true);
 	return 0;
 }
