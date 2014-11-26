@@ -30,7 +30,7 @@ namespace SerialCom
 		static DWORD WINAPI threadFunc(LPVOID pthis);
 		int threadMain();
 		int getReadData(char *buf, int bufSize);
-		void testCom();
+		void testCom(char *retBuf, int retBufSize);
 	};
 
 	bool SerialCom::initComPort(char *_portName, int _boundRate, int _writeBufSize)
@@ -137,13 +137,15 @@ namespace SerialCom
 		ReleaseMutex(mutexHandle);
 	}
 
-	void SerialCom::testCom()
+	void SerialCom::testCom(char *retBuf, int retBufSize)
 	{
 		char buffer[1024];
 		DWORD toReadBytes = 1024;
 		DWORD readBytes;
 		ReadFile(portHandle, buffer, toReadBytes, &readBytes, NULL);
-		printf("%s\n", buffer);
+		buffer[readBytes] = '\0';
+		strncpy_s(retBuf, retBufSize, buffer, readBytes+1);
+		//printf("%s", buffer);
 	}
 
 	int getSerialPortNumbers(int *comPortTable, int num_max)
@@ -193,19 +195,20 @@ int main()
 	{
 		//Sleep(100);
 		//com.getReadData(buf, 1024);
-		com.testCom();
-		//printf("%s", buf);
+		com.testCom(buf, 1024);
+		printf("%s", buf);
+		//printf("ok\n");
 	}
-
+	
 	if (com.exitComPort())
 	{
 		printf("exit true\n");
 	}
-
+	/*
 	for (int i = 0; i < numOfComPorts; i++)
 	{
 		printf("%d\n", comPortTable[i]);
-	}
+	}*/
 
 	return 0;
 }
