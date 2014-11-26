@@ -125,7 +125,6 @@ namespace SerialCom
 		if (CloseHandle(portHandle))
 		{
 			portHandle = NULL;
-			return true;
 		}
 		else{
 			printf("ƒ|[ƒg‚ğ•Â‚¶‚é‚±‚Æ‚ª‚Å‚«‚Ü‚¹‚ñ‚Å‚µ‚½. \n");
@@ -135,6 +134,8 @@ namespace SerialCom
 		WaitForSingleObject(mutexHandle, 0);
 		threadExitFlag = true;
 		ReleaseMutex(mutexHandle);
+
+		return true;
 	}
 
 	void SerialCom::testCom(char *retBuf, int retBufSize)
