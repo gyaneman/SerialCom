@@ -1,8 +1,10 @@
+#define _CRT_SECURE_NO_WARNINGS
 #include <cstdio>
 #include <string>
 #include <Windows.h>
 
 #define DEVICES_BUF_SIZE 65535
+#define RECEIVE_BUF_SIZE 1024
 
 namespace SerialCom
 {
@@ -12,10 +14,10 @@ namespace SerialCom
 		char portName[128];
 		int portNum = 0;
 		int boundRate = 9600;
-		int readBufSize = 0;
+		int receiveBufLength = 0;
 		int writeBufSize = 0;
 		HANDLE portHandle;
-		BYTE *readBuffer;
+		char receiveBuffer[RECEIVE_BUF_SIZE];
 		BYTE *writeBuffer;
 		HANDLE threadHandle;
 		int threadId = 0;
@@ -29,7 +31,7 @@ namespace SerialCom
 		int readComData(char *readBuf);
 		static DWORD WINAPI threadFunc(LPVOID pthis);
 		int threadMain();
-		int getReadData(char *buf, int bufSize);
+		int getData(char *buf, int bufSize);
 		void testCom(char *retBuf, int retBufSize);
 	};
 
@@ -67,6 +69,7 @@ namespace SerialCom
 		threadHandle = CreateThread(NULL, 0, SerialCom::threadFunc, (LPVOID)this, CREATE_SUSPENDED, (LPDWORD)&threadId);
 		threadExitFlag = false;
 		mutexHandle = CreateMutex(NULL, TRUE, NULL);
+		ResumeThread(threadHandle);
 
 		return true;
 	}
@@ -75,19 +78,21 @@ namespace SerialCom
 	{
 		bool exitFlag;
 		const DWORD bufLength = 1024;
-		BYTE buffer[bufLength];
+		char buffer[bufLength];
 		DWORD readBytes = 0;
 		
 		while (ReadFile(portHandle, buffer, bufLength, &readBytes, NULL))
 		{
 			if (readBytes > 0){
-				if (readBuffer != NULL)
-					delete [] readBuffer;
-				readBuffer = new BYTE[readBytes];
-				readBufSize = readBytes;
-				//printf("%d\n", readBufSize);
 				WaitForSingleObject(mutexHandle, 0);
-				memcpy_s(readBuffer, readBytes, buffer, readBytes);
+				buffer[readBytes] = '\0';
+				receiveBufLength = receiveBufLength + readBytes - 1;
+				if (receiveBufLength + 1 >= RECEIVE_BUF_SIZE){
+					printf("receive buf overflow...\n");
+					receiveBufLength = readBytes - 1;
+					receiveBuffer[0] = '\0';
+				}
+				strcat(receiveBuffer, buffer);
 				exitFlag = threadExitFlag;
 				ReleaseMutex(mutexHandle);
 				if (exitFlag)
@@ -104,11 +109,14 @@ namespace SerialCom
 		ExitThread(0);
 	}
 
-	int SerialCom::getReadData(char *buf, int bufSize)
+	int SerialCom::getData(char *buf, int bufSize)
 	{
-		//memcpy_s(buf, bufSize, readBuffer, readBufSize);
-		strncpy_s(buf, bufSize, (char*)readBuffer, readBufSize);
-		return readBufSize;
+		WaitForSingleObject(mutexHandle, 0);
+		strncpy_s(buf, bufSize, receiveBuffer, RECEIVE_BUF_SIZE);
+		receiveBuffer[0] = '\0';
+		receiveBufLength = 0;
+		ReleaseMutex(mutexHandle);
+		return receiveBufLength;
 	}
 
 	bool SerialCom::exitComPort()
@@ -145,8 +153,8 @@ namespace SerialCom
 		DWORD readBytes;
 		ReadFile(portHandle, buffer, toReadBytes, &readBytes, NULL);
 		buffer[readBytes] = '\0';
+		printf("%s\n", buffer);
 		strncpy_s(retBuf, retBufSize, buffer, readBytes+1);
-		//printf("%s", buffer);
 	}
 
 	int getSerialPortNumbers(int *comPortTable, int num_max)
@@ -194,22 +202,15 @@ int main()
 	
 	while ((c = getchar()) != 'q')
 	{
-		//Sleep(100);
-		//com.getReadData(buf, 1024);
-		com.testCom(buf, 1024);
+		com.getData(buf, 1024);
+		//com.testCom(buf, 1024);
 		printf("%s", buf);
-		//printf("ok\n");
 	}
 	
 	if (com.exitComPort())
 	{
-		printf("exit true\n");
+		printf("nomally exited\n");
 	}
-	/*
-	for (int i = 0; i < numOfComPorts; i++)
-	{
-		printf("%d\n", comPortTable[i]);
-	}*/
 
 	return 0;
 }
