@@ -1,9 +1,10 @@
 #define _CRT_SECURE_NO_WARNINGS
 #include <cstdio>
 #include <string>
+#include <memory>
 #include <Windows.h>
 
-#define DEVICES_BUF_SIZE 65535
+#define DEVICES_BUF_SIZE 1024
 #define RECEIVE_BUF_SIZE 1024
 
 namespace SerialCom
@@ -14,8 +15,8 @@ namespace SerialCom
 		char portName[128];
 		int portNum = 0;
 		int boundRate = 9600;
-		int receiveBufLength = 0;
 		int writeBufSize = 0;
+		int receiveBufLength = 0;
 		HANDLE portHandle;
 		char receiveBuffer[RECEIVE_BUF_SIZE];
 		BYTE *writeBuffer;
@@ -24,18 +25,16 @@ namespace SerialCom
 		HANDLE mutexHandle;
 		bool threadExitFlag;
 	public:
-		bool initComPort(char *_portName, int _boundRate, int _writeBufSize);
-		bool startComPort();
-		bool exitComPort();
-		int sendComData(char *transString);
-		int readComData(char *readBuf);
+		bool init(char *_portName, int _boundRate, int _writeBufSize);
+		bool exit();
+		int sendString(char *transString);
+		int readData(char *buf, int bufSize);
 		static DWORD WINAPI threadFunc(LPVOID pthis);
 		int threadMain();
-		int getData(char *buf, int bufSize);
 		void testCom(char *retBuf, int retBufSize);
 	};
 
-	bool SerialCom::initComPort(char *_portName, int _boundRate, int _writeBufSize)
+	bool SerialCom::init(char *_portName, int _boundRate, int _writeBufSize)
 	{
 		strncpy_s(portName, _portName, 128);
 		boundRate = _boundRate;
@@ -59,9 +58,9 @@ namespace SerialCom
 
 		COMMTIMEOUTS cto;
 		GetCommTimeouts(portHandle, &cto);
-		cto.ReadIntervalTimeout = 1000;
+		cto.ReadIntervalTimeout = 100;
 		cto.ReadTotalTimeoutMultiplier = 0;
-		cto.ReadTotalTimeoutConstant = 1000;
+		cto.ReadTotalTimeoutConstant = 50;
 		cto.WriteTotalTimeoutMultiplier = 0;
 		cto.WriteTotalTimeoutConstant = 0;
 		SetCommTimeouts(portHandle, &cto);
@@ -80,23 +79,26 @@ namespace SerialCom
 		const DWORD bufLength = 1024;
 		char buffer[bufLength];
 		DWORD readBytes = 0;
+		DWORD rb = 0;
 		
 		while (ReadFile(portHandle, buffer, bufLength, &readBytes, NULL))
 		{
 			if (readBytes > 0){
+				//printf("%d\n", readBytes);
 				WaitForSingleObject(mutexHandle, 0);
-				buffer[readBytes] = '\0';
-				receiveBufLength = receiveBufLength + readBytes - 1;
+				
 				if (receiveBufLength + 1 >= RECEIVE_BUF_SIZE){
 					printf("receive buf overflow...\n");
 					receiveBufLength = readBytes - 1;
 					receiveBuffer[0] = '\0';
 				}
-				strcat(receiveBuffer, buffer);
+				
+				memcpy_s(receiveBuffer + receiveBufLength, RECEIVE_BUF_SIZE - receiveBufLength, buffer, readBytes);
+				receiveBufLength = receiveBufLength + readBytes;
+
 				exitFlag = threadExitFlag;
 				ReleaseMutex(mutexHandle);
-				if (exitFlag)
-					break;
+				if (exitFlag) break;
 			}
 		}
 		return 0;
@@ -104,22 +106,38 @@ namespace SerialCom
 
 	DWORD WINAPI SerialCom::threadFunc(LPVOID pthis)
 	{
-		printf("ok!\n");
 		((SerialCom*)pthis)->threadMain();
 		ExitThread(0);
 	}
 
-	int SerialCom::getData(char *buf, int bufSize)
+	int SerialCom::readData(char *buf, int bufSize)
 	{
 		WaitForSingleObject(mutexHandle, 0);
-		strncpy_s(buf, bufSize, receiveBuffer, RECEIVE_BUF_SIZE);
-		receiveBuffer[0] = '\0';
+		//printf("%d\n", receiveBufLength);
+		memcpy_s(buf, bufSize, receiveBuffer, receiveBufLength);
+		buf[receiveBufLength] = '\0';
+		int ret = receiveBufLength;
 		receiveBufLength = 0;
 		ReleaseMutex(mutexHandle);
-		return receiveBufLength;
+		return ret;
 	}
 
-	bool SerialCom::exitComPort()
+	int SerialCom::sendString(char *transString)
+	{
+		DWORD writeBytes = 0;
+		int index = 0;
+		DWORD toWriteBytes = strlen(transString);
+		//printf("%d\n", toWriteBytes);
+		while (toWriteBytes > 0)
+		{
+			WriteFile(portHandle, transString + index, toWriteBytes, &writeBytes, NULL);
+			index += writeBytes;
+			toWriteBytes -= writeBytes;
+		}
+		return 0;
+	}
+
+	bool SerialCom::exit()
 	{
 		if (threadHandle != NULL)
 		{
@@ -157,6 +175,7 @@ namespace SerialCom
 		strncpy_s(retBuf, retBufSize, buffer, readBytes+1);
 	}
 
+	/* この関数を使うことで空いているPCの空いているCOMポートがわかるお */
 	int getSerialPortNumbers(int *comPortTable, int num_max)
 	{
 		char devicesBuff[DEVICES_BUF_SIZE];
@@ -193,23 +212,35 @@ int main()
 	int numOfComPorts = SerialCom::getSerialPortNumbers(comPortTable, 255);
 	SerialCom::SerialCom com;
 	char c;
+	int count = 0;
 	char buf[1024];
-	printf("program running\n");
-	if (com.initComPort("COM3", 9600, 255))
+
+	if (!com.init("COM3", 38400, 255))
 	{
-		printf("init true\n");
+		printf("error\n");
+		printf("press any key\n");
+		while (getchar());
+		return 0;
 	}
 	
-	while ((c = getchar()) != 'q')
+	while (true)
 	{
-		com.getData(buf, 1024);
+		int len = com.readData(buf, 1024);
+
+		if (len != 0){
+			printf("%s", buf);
+		}
+		//while (getchar() != 'q');
 		//com.testCom(buf, 1024);
-		printf("%s", buf);
+		com.sendString("a");
+		Sleep(100);
 	}
 	
-	if (com.exitComPort())
+	if (!com.exit())
 	{
-		printf("nomally exited\n");
+		printf("error\n");
+		printf("press any key\n");
+		while (getchar());
 	}
 
 	return 0;
