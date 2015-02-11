@@ -96,31 +96,39 @@ namespace Robot{
 		ExitThread(0);
 	}
 
-	int SerialCom::read(char *buf, int bufSize)
+	int SerialCom::read(char *_buf, int _bufSize)
 	{
 		WaitForSingleObject(mutexHandle, 0);
 		//printf("%d\n", receiveBufLength);
-		memcpy_s(buf, bufSize, receiveBuffer, receiveBufLength);
-		buf[receiveBufLength] = '\0';
+		memcpy_s(_buf, _bufSize, receiveBuffer, receiveBufLength);
+		_buf[receiveBufLength] = '\0';
 		int ret = receiveBufLength;
 		receiveBufLength = 0;
 		ReleaseMutex(mutexHandle);
 		return ret;
 	}
 
-	int SerialCom::send(char *transString)
+	void SerialCom::clearReadBuffer()
+	{
+		while (receiveBufLength != 0)
+		{
+			receiveBufLength = 0;
+		}
+	}
+
+	void SerialCom::send(char *_transString)
 	{
 		DWORD writeBytes = 0;
 		int index = 0;
-		DWORD toWriteBytes = strlen(transString);
+		DWORD toWriteBytes = strlen(_transString);
 		//printf("%d\n", toWriteBytes);
 		while (toWriteBytes > 0)
 		{
-			WriteFile(portHandle, transString + index, toWriteBytes, &writeBytes, NULL);
+			WriteFile(portHandle, _transString + index, toWriteBytes, &writeBytes, NULL);
 			index += writeBytes;
 			toWriteBytes -= writeBytes;
 		}
-		return 0;
+		return;
 	}
 
 	bool SerialCom::exit()
@@ -162,7 +170,7 @@ namespace Robot{
 	}
 
 	/* この関数を使うことでPCの空いているCOMポートがわかるお */
-	int getSerialPortNumbers(int *comPortTable, int num_max)
+	int getSerialPortNumbers(int *_comPortTable, int _num_max)
 	{
 		char devicesBuff[DEVICES_BUF_SIZE];
 		int comPorts = 0;
@@ -177,8 +185,8 @@ namespace Robot{
 			{
 				if (strncmp(p, "COM", 3) == 0 && p[3] != '\0')
 				{
-					comPortTable[comPorts++] = atoi(p + 3);
-					if (comPorts >= num_max)
+					_comPortTable[comPorts++] = atoi(p + 3);
+					if (comPorts >= _num_max)
 						break;
 				}
 

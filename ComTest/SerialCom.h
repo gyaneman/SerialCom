@@ -35,8 +35,9 @@ namespace Robot{
 
 		bool init(char *_portName, int _boundRate, int _writeBufSize);
 		bool exit();
-		int send(char *transString);
-		int read(char *buf, int bufSize);
+		void send(char *_transString);
+		int read(char *_buf, int _bufSize);
+		void clearReadBuffer();
 		void testCom(char *retBuf, int retBufSize);
 	};
 
