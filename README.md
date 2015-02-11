@@ -6,6 +6,8 @@ Windowsでシリアル通信を行うプログラムです. 言語はC++.
 ##開発環境
 VisualStudio2013
 
+##使い方
+SerialCom.hとSerialCom.cppを適当なところにおいてください. 
 
 ##ドキュメント
 ただし適当です.
